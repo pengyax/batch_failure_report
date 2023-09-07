@@ -34,6 +34,19 @@ def generate_remark(disposition):
         # 返回Other
         return 'Other'
 
+def get_market(x):
+    # 如果Division是以ISP开头，Market的值是ISP
+    if x.startswith("ISP"):
+        return "ISP"
+    # 如果Division是数字，Market的值是US
+    elif x.isdigit():
+        return "US"
+    # 否则，Market的值是Unknown
+    else:
+        return "Unknown"  
+    
+
+
 def process(df_add,df_old):
     df_QIM_duplicate = (
     df_add
@@ -54,14 +67,13 @@ def process(df_add,df_old):
     return df_duplicate,df_old
 
 
-
-
-
-
-
-
-
 if __name__ == "__main__":
+    
+    vendor_mapping = pd.read_excel(r'C:\Medline\CPM\data\vendor_mapping\Vendor _mapping 2023_v1.xlsx')
+    vendor_mapping_dict = dict(zip(vendor_mapping['Vendor Number'],vendor_mapping['Supervisor']))
+    
+    
+    
     fn_engine = connect('fn_mysql')
     sql_query = r'''
                     select
