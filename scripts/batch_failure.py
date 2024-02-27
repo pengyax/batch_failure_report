@@ -1,6 +1,6 @@
 import pandas as pd
+import numpy as np
 from sql_engine import connect
-
 
 def extract_division(x):
     # 如果是以ISP开头的，保留原值
@@ -21,14 +21,14 @@ def extract_division(x):
 def generate_remark(disposition):
     # 把disposition参数转换成小写
     disposition = disposition.lower()
-    # 判断是否包含deviation, PIC或accept
-    if 'deviation' in disposition or 'pic' in disposition or 'accept' in disposition:
-        # 如果是，返回Accepted
-        return 'Accepted'
     # 判断是否包含Rework, PIC或Reinspection
-    elif 'rework' in disposition or 'pic' in disposition or 'reinspection' in disposition:
+    if 'rework' in disposition or 'return' in disposition or 'reinspection' in disposition:
         # 如果是，返回Reworked
         return 'Reworked'
+    # 判断是否包含deviation, PIC或accept
+    elif 'deviation' in disposition or 'pic' in disposition or 'accept' in disposition:
+        # 如果是，返回Accepted
+        return 'Accepted'
     # 其他情况
     else:
         # 返回Other
@@ -44,8 +44,6 @@ def get_market(x):
     # 否则，Market的值是Unknown
     else:
         return "Unknown"  
-    
-
 
 def process(df_add,df_old):
     df_QIM_duplicate = (
@@ -64,16 +62,32 @@ def process(df_add,df_old):
 
     df_duplicate = pd.concat([df_QIM_duplicate,df_offline_duplicate],ignore_index=True)
 
-    return df_duplicate,df_old
-
+    df_duplicate = (
+    df_duplicate
+    .rename(columns={'Comments':'Disposition'})
+    .assign(Supervisor = np.nan)
+    .loc[:,['ID','Inspection Date','Supervisor','Inspector','Vendor Code','Vendor','Division','Item Number','PO Number','Lot Number','Reject Code','Reject Description','Disposition']]
+    )
+    
+    (
+    df_old
+    .loc[:,['ID','Inspection Date','Supervisor','Inspector','Vendor Code','Vendor','Division','Item Number','PO Number','Lot Number','Reject Code','Reject Description','Disposition']]
+    .query('`Reject Description`.str.contains("100%",na=False,case=False)')
+    .pipe(lambda d : pd.concat([d,df_duplicate],ignore_index=True))
+    .assign(Division = lambda d : d.Division.astype(str))
+    .assign(Division = lambda d : d.Division.apply(extract_division),
+            Comments = lambda d : d['Disposition'].apply(generate_remark),
+            Supervisor = lambda d : d.apply(lambda s : vendor_mapping_dict.get(int(s['Vendor Code'])) if pd.isna(s['Supervisor']) else s['Supervisor'], axis = 1),
+            Market = lambda d : d.Division.apply(get_market)
+            )
+    .to_excel('../data_output/out1.xlsx',index= False)
+    )
 
 if __name__ == "__main__":
     
-    vendor_mapping = pd.read_excel(r'C:\Medline\CPM\data\vendor_mapping\Vendor _mapping 2023_v1.xlsx')
+    vendor_mapping = pd.read_excel(r'C:\Medline\2. CPM\data\vendor_mapping\Vendor _mapping 2024_v1.xlsx')
     vendor_mapping_dict = dict(zip(vendor_mapping['Vendor Number'],vendor_mapping['Supervisor']))
-    
-    
-    
+     
     fn_engine = connect('fn_mysql')
     sql_query = r'''
                     select
